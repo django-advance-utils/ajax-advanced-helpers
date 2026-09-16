@@ -211,7 +211,10 @@ if (typeof ajax_helpers === 'undefined') {
     }
 
     $(window).on("popstate", function (e) {
-      get_content(e.target.window.location.href, false);
+      // Keep window_location in step with the address bar the browser has just changed, or a later
+      // post_json with no url of its own goes to the page we navigated away from.
+      window_location = e.target.window.location.href;
+      get_content(window_location, false);
     });
 
     function process_commands(commands) {
