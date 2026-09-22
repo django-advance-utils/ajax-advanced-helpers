@@ -391,10 +391,18 @@ if (typeof ajax_helpers === 'undefined') {
                             wrapper.innerHTML = template.trim();
                             var tip = wrapper.firstChild;
                             tip.classList.add('ah-tooltip-' + placement, 'ah-show');
+                            // A template drawn for the 0.0.x client uses Bootstrap's tooltip classes:
+                            // `.tooltip > .arrow + .tooltip-inner`. It still works here -- the content
+                            // goes into `.tooltip-inner`, and Bootstrap's `.tooltip` is opacity 0 until
+                            // it has `show`, with the arrow placed by `bs-tooltip-<placement>`.
+                            if (tip.classList.contains('tooltip')) {
+                                tip.classList.add('show', 'bs-tooltip-' + placement);
+                            }
                             tip.style.position = 'absolute';
                             tip.style.top = '0';
                             tip.style.left = '0';
-                            tip.querySelector('.ah-tooltip-inner').innerHTML = data;
+                            var inner = tip.querySelector('.ah-tooltip-inner') || tip.querySelector('.tooltip-inner') || tip;
+                            inner.innerHTML = data;
                             document.body.appendChild(tip);
                             position_tooltip(tip, el, placement);
                             active_tooltip = tip;
