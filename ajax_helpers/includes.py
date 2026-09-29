@@ -1,7 +1,7 @@
 from .config import get_css_framework
 from .html_include import SourceBase, pip_version
 
-version = pip_version('django-ajax-helpers')
+version = pip_version('ajax-advanced-helpers')
 
 
 class Jquery(SourceBase):

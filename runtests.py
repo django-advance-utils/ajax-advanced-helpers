@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Standalone test runner for django-ajax-helpers.
+"""Standalone test runner for ajax-advanced-helpers.
 
 Configures a minimal Django environment (only ``ajax_helpers`` installed) so the
 package's tests can run without the full example project / ecosystem. Usage::

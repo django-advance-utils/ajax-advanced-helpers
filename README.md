@@ -1,13 +1,19 @@
-[![PyPI version](https://badge.fury.io/py/django-ajax-helpers.svg)](https://badge.fury.io/py/django-ajax-helpers)
+[![PyPI version](https://badge.fury.io/py/ajax-advanced-helpers.svg)](https://badge.fury.io/py/ajax-advanced-helpers)
 
-# Django Ajax Helpers
+# ajax-advanced-helpers
+
+The [django-advance-utils](https://github.com/django-advance-utils) line of Ian Jones's
+[django-ajax-helpers](https://github.com/jonesim/ajax-helpers), forked at 1.0.1 so that releases
+can be cut as the downstream libraries (django-advanced-datatables, django-advanced-menus,
+django-advanced-modals) and django-advanced-report-builder need them. The Python package is still
+`ajax_helpers`, so existing imports and `INSTALLED_APPS` entries do not change; only the pip name does.
 
 A Django library for building interactive AJAX-driven pages. Send commands from Django views to the browser and handle button clicks, tooltips, file uploads, and more — all without writing custom JavaScript.
 
 ## Installation
 
 ```bash
-pip install django-ajax-helpers
+pip install ajax-advanced-helpers
 ```
 
 Add to `INSTALLED_APPS`:
