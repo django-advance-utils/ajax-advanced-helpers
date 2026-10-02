@@ -84,10 +84,14 @@ class SourceBase:
         return self.javascript() + self.css()
 
 
-def html_include(library=None, cdn=False, module=None, legacy=False, version=None):
+def html_include(library=None, cdn=False, module=None, legacy=False, version=None, included=None):
     """
     Returns a string with javascript and css includes defined in a subclass of SourceBase in the calling module or
     defined in passed module as a module or string.
+
+    included is a set of the SourceBase classes already written out. When it is given, those classes are left out,
+    and the ones written out now are added to it. A caller that keeps one set across its calls gets each library
+    once, even when two packages share it. The first call to include a library decides its cdn and version.
     """
     if isinstance(module, str):
         module = import_module(module)
@@ -99,11 +103,16 @@ def html_include(library=None, cdn=False, module=None, legacy=False, version=Non
         version = getattr(module, 'version', '')
     packages = getattr(module, 'packages', None)
     if packages and library in packages:
-        return mark_safe('\n'.join([lib(version, legacy).includes(cdn) for lib in packages[library]]))
-    source_class = getattr(module, library, None)
-    if isclass(source_class) and issubclass(source_class, SourceBase):
-        return mark_safe(source_class(version, legacy).includes(cdn))
-    return ''
+        sources = packages[library]
+    else:
+        source_class = getattr(module, library, None)
+        if not (isclass(source_class) and issubclass(source_class, SourceBase)):
+            return ''
+        sources = [source_class]
+    if included is not None:
+        sources = [lib for lib in sources if lib not in included]
+        included.update(sources)
+    return mark_safe('\n'.join([lib(version, legacy).includes(cdn) for lib in sources]))
 
 
 def pip_version(package):
