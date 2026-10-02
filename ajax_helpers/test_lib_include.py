@@ -69,6 +69,13 @@ class LibIncludeOncePerRenderTests(SimpleTestCase):
         self.assertEqual(jquery_count(html), 1)
         self.assertIn('https://ajax.googleapis.com/', html)
 
+    def test_the_first_request_decides_the_version(self):
+        html = render_string("{% lib_include 'Jquery' module='ajax_helpers.includes' version='1' %}"
+                             "{% lib_include 'Jquery' module='ajax_helpers.includes' version='2' %}")
+        self.assertEqual(jquery_count(html), 1)
+        self.assertIn('jquery.min.js?v=1', html)
+        self.assertNotIn('?v=2', html)
+
     def test_each_render_writes_its_own_libraries(self):
         """A modal body or an ajax response is a separate render, and the page it goes into may not have them."""
         self.assertEqual(jquery_count(render('jquery.html')), 1)
