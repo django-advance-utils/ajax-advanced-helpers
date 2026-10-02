@@ -2,9 +2,9 @@
 
 # ajax-advanced-helpers
 
-The [django-advance-utils](https://github.com/django-advance-utils) line of Ian Jones's
-[django-ajax-helpers](https://github.com/jonesim/ajax-helpers), forked so that releases can be
-cut as the downstream libraries and django-advanced-report-builder need them. The Python package
+A fork of Ian Jones's [django-ajax-helpers](https://github.com/jonesim/ajax-helpers), maintained
+by [django-advance-utils](https://github.com/django-advance-utils) with Ian's agreement so that releases
+can be cut as the downstream libraries and django-advanced-report-builder need them. The Python package
 is still `ajax_helpers`, so existing imports and `INSTALLED_APPS` entries do not change; only the
 pip name does.
 
@@ -970,6 +970,14 @@ self.add_command('my_command', data='hello')
 
 ---
 
+## Credits
+
+ajax-advanced-helpers was created by [Ian Jones](https://github.com/jonesim) as
+[django-ajax-helpers](https://github.com/jonesim/ajax-helpers). The design and most of the code are his;
+this fork carries it forward.
+
+---
+
 ## License
 
-MIT
+MIT, copyright (c) 2021 Ian Jones. See [LICENSE](LICENSE).
