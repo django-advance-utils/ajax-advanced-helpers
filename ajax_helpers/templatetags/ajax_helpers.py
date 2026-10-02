@@ -7,28 +7,59 @@ from ..utils import random_string
 from ..html_include import html_include
 register = template.Library()
 
+# The render context key under which lib_include records the libraries a render has written out.
+LIBRARIES_INCLUDED = 'ajax_helpers_libraries_included'
+
 
 @register.simple_tag(takes_context=True)
 def lib_include(context, *args, **kwargs):
+    """
+    The script and stylesheet tags for the named libraries (see html_include).
+
+    Each library is written once per render. A later request for one already written writes nothing, whether it
+    comes from the template this one extends, from a template it includes, or through a second package that also
+    contains the library. A second copy is wasted at best (Fancytree notices one and ignores it). At worst it breaks
+    the page: a second jQuery replaces the first and drops every plugin registered on it.
+
+    The scope is one render: the template rendered, the ones it extends and the ones it includes. A fragment
+    rendered on its own, such as a modal body or an ajax response, includes its libraries again.
+    """
     request = context.get('request')
     legacy = False
     if request:
         user_agent = request.META.get('HTTP_USER_AGENT', '')
         if 'Trident' in user_agent or 'MSIE' in user_agent:
             legacy = True
+    included = _libraries_included(context)
     include_str = ''
     if not args:
         include_str = html_include(cdn=kwargs.get('cdn'),
                                    module=kwargs.get('module'),
                                    legacy=legacy,
-                                   version=kwargs.get('version'))
+                                   version=kwargs.get('version'),
+                                   included=included)
     for a in args:
         include_str += html_include(a,
                                     cdn=kwargs.get('cdn'),
                                     module=kwargs.get('module'),
                                     legacy=legacy,
-                                    version=kwargs.get('version'))
+                                    version=kwargs.get('version'),
+                                    included=included)
     return mark_safe(include_str)
+
+
+def _libraries_included(context):
+    """
+    The set of SourceBase classes this render has written out, or None when context is not a template context.
+
+    It is kept at the root of the render context. An included template gets a layer of its own above that root,
+    but everything in one Template.render call shares the root: the template rendered, the ones it extends and
+    the ones it includes, with or without only. Django's include tag keeps its per-render template cache there too.
+    """
+    render_context = getattr(context, 'render_context', None)
+    if render_context is None:
+        return None
+    return render_context.dicts[0].setdefault(LIBRARIES_INCLUDED, set())
 
 
 @register.simple_tag
