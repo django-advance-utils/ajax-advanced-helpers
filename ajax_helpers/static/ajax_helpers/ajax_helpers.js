@@ -171,7 +171,9 @@ if (typeof ajax_helpers === 'undefined') {
 
         function fetch_request(config) {
             var method = config.method || 'get';
-            var headers = {};
+            // jQuery sent X-Requested-With on every request, and is_ajax() on the server
+            // still routes on it, so without it an ajax POST gets no response.
+            var headers = {'X-Requested-With': 'XMLHttpRequest'};
             if (config.contentType) {
                 headers['Content-Type'] = config.contentType;
             }
@@ -217,6 +219,7 @@ if (typeof ajax_helpers === 'undefined') {
             var xhr = new XMLHttpRequest();
             xhr.open('post', url, !is_sync);
             add_CSRF(xhr);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
             if (timeout) {
                 xhr.timeout = timeout;
             }

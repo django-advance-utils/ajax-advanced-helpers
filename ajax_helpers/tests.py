@@ -1,6 +1,10 @@
+from pathlib import Path
+
 from django.core.exceptions import ImproperlyConfigured
 from django.template import Context, Template
-from django.test import SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, override_settings
+
+from .utils import is_ajax
 
 INCLUDE = ("{% load ajax_helpers %}"
            "{% lib_include 'ajax_helpers' 'Bootstrap' module='ajax_helpers.includes' %}")
@@ -40,3 +44,25 @@ class CssFrameworkIncludeTests(SimpleTestCase):
     def test_unsupported_framework_raises(self):
         with self.assertRaises(ImproperlyConfigured):
             render_includes()
+
+
+class RequestHeaderTests(SimpleTestCase):
+    """is_ajax() routes a request on X-Requested-With, so the client has to send it.
+
+    jQuery added the header to every request it made. The client's own fetch and XMLHttpRequest calls do not, so
+    without these lines every ajax POST to an AjaxHelpers view got no response.
+    """
+
+    @staticmethod
+    def client_js():
+        return (Path(__file__).parent / 'static' / 'ajax_helpers' / 'ajax_helpers.js').read_text(encoding='utf-8')
+
+    def test_fetch_requests_send_it(self):
+        self.assertIn("var headers = {'X-Requested-With': 'XMLHttpRequest'};", self.client_js())
+
+    def test_xhr_requests_send_it(self):
+        self.assertIn("xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');", self.client_js())
+
+    def test_is_ajax_reads_it(self):
+        self.assertTrue(is_ajax(RequestFactory().post('/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')))
+        self.assertFalse(is_ajax(RequestFactory().post('/')))
