@@ -1,4 +1,4 @@
-[![PyPI version](https://badge.fury.io/py/ajax-advanced-helpers.svg)](https://badge.fury.io/py/ajax-advanced-helpers)
+[![PyPI version](https://img.shields.io/pypi/v/ajax-advanced-helpers)](https://pypi.org/project/ajax-advanced-helpers/)
 
 # ajax-advanced-helpers
 
