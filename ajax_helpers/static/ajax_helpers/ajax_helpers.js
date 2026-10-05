@@ -169,9 +169,25 @@ if (typeof ajax_helpers === 'undefined') {
             });
         }
 
+        // jQuery sent X-Requested-With only to its own origin. On a cross-origin request
+        // a custom header makes the browser ask the other server first (a CORS
+        // preflight). A URL that does not parse counts as cross-origin, as it did there.
+        function same_origin(url) {
+            try {
+                return new URL(url, window.location.href).origin === window.location.origin;
+            } catch (e) {
+                return false;
+            }
+        }
+
         function fetch_request(config) {
             var method = config.method || 'get';
             var headers = {};
+            // is_ajax() on the server routes on X-Requested-With, which jQuery sent, so
+            // without it an ajax POST gets no response.
+            if (same_origin(config.url)) {
+                headers['X-Requested-With'] = 'XMLHttpRequest';
+            }
             if (config.contentType) {
                 headers['Content-Type'] = config.contentType;
             }
@@ -217,6 +233,9 @@ if (typeof ajax_helpers === 'undefined') {
             var xhr = new XMLHttpRequest();
             xhr.open('post', url, !is_sync);
             add_CSRF(xhr);
+            if (same_origin(url)) {
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            }
             if (timeout) {
                 xhr.timeout = timeout;
             }
