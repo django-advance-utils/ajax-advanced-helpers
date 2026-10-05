@@ -236,7 +236,9 @@ if (typeof ajax_helpers === 'undefined') {
             if (same_origin(url)) {
                 xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
             }
-            if (timeout) {
+            // A browser refuses a timeout on a synchronous request and throws, so it is
+            // only set on an asynchronous one. jQuery ignored the timeout in that case too.
+            if (timeout && !is_sync) {
                 xhr.timeout = timeout;
             }
             if (options !== undefined && options.progress !== undefined) {
