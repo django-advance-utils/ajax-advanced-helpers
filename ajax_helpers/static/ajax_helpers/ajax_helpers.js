@@ -281,6 +281,26 @@ if (typeof ajax_helpers === 'undefined') {
             success(body, 'success', xhr);
         }
 
+        // What jQuery's .val(value) did. A list selects every option of a <select> whose value is in it,
+        // and checks a checkbox or radio whose value is; assigning it to .value instead turns it into
+        // one string ("1,3,2"), which matches no option, so a multiple select was left with nothing.
+        function set_element_value(el, val) {
+            if (Array.isArray(val)) {
+                var values = val.map(String);
+                if (el.tagName === 'SELECT') {
+                    Array.prototype.forEach.call(el.options, function (option) {
+                        option.selected = values.indexOf(option.value) !== -1;
+                    });
+                    return;
+                }
+                if (el.type === 'checkbox' || el.type === 'radio') {
+                    el.checked = values.indexOf(el.value) !== -1;
+                    return;
+                }
+            }
+            el.value = val === null || val === undefined ? '' : val;
+        }
+
         function post_json(ajax_data, timeout) {
             if (timeout === undefined) {
                 var timeout = 0
@@ -618,7 +638,7 @@ if (typeof ajax_helpers === 'undefined') {
 
             set_value: function (command) {
                 query_all(command.selector).forEach(function (el) {
-                    el.value = command.val;
+                    set_element_value(el, command.val);
                 });
             },
 
