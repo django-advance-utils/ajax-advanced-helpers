@@ -146,7 +146,11 @@ if (typeof ajax_helpers === 'undefined') {
         // attachment -> blob, application/json -> parsed object, otherwise text.
         function dispatch_fetch(response, success, response_type) {
             var headers = response.headers;
+            // Stands in for the jqXHR jQuery handed success: the status as well as the headers, as
+            // a caller reading xhr.status off it got before the fetch path existed.
             var fake_xhr = {
+                status: response.status,
+                statusText: response.statusText,
                 getResponseHeader: function (name) {
                     return headers.get(name);
                 }
