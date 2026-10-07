@@ -6,7 +6,7 @@ from ajax_helpers.screen_capture import ChooseAudioModal
 
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='ajax_main', )),
-    path('ajax-redirect/', RedirectView.as_view(pattern_name='ajax_main', ), name='django-ajax-helpers'),
+    path('ajax-redirect/', RedirectView.as_view(pattern_name='ajax_main', ), name='ajax-advanced-helpers'),
     path('ajax_example', views.Example1.as_view(), name='ajax_main'),
     path('redirect', views.Example2.as_view(), name='redirect'),
     path('timer/', views.TimerExample.as_view(), name='timer_examples'),
