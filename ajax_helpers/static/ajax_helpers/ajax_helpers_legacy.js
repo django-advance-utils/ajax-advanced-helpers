@@ -247,9 +247,11 @@ if (typeof ajax_helpers === 'undefined') {
 
     // Runs the waiting responses now, oldest first, until they are done or the page is busy again.
     // One that makes it busy -- another close -- goes back at the front, so the rest stay behind
-    // it in order. A response stays queued until its turn, so a command that throws loses only
-    // the rest of its own response: the ones behind it are still waiting, and the poll is set
-    // again for them.
+    // it in order. Whatever a response queues while it runs -- the commands an if or an onload
+    // runs through process_commands -- is part of it, so goes ahead of what it leaves of itself,
+    // as each one's own poll used to put it. A response stays queued until its turn, so a command
+    // that throws loses only the rest of its own response: the ones behind it are still waiting,
+    // and the poll is set again for them.
     function resume_commands() {
       if (waiting_timer !== null) {
         window.clearTimeout(waiting_timer);
@@ -258,9 +260,15 @@ if (typeof ajax_helpers === 'undefined') {
       try {
         while (waiting_commands.length > 0 && !ajax_helpers.ajax_busy) {
           var commands = waiting_commands.shift();
-          if (!run_commands(commands)) {
-            waiting_commands.unshift(commands);
-          }
+          var behind = waiting_commands.slice();
+          var done = run_commands(commands);
+          var nested = waiting_commands.filter(function (queued) {
+            return behind.indexOf(queued) === -1;
+          });
+          behind = waiting_commands.filter(function (queued) {
+            return behind.indexOf(queued) !== -1;
+          });
+          waiting_commands = nested.concat(done ? [] : [commands], behind);
         }
       } finally {
         if (waiting_commands.length > 0) {
