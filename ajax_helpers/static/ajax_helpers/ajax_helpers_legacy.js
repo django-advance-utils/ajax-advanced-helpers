@@ -218,20 +218,43 @@ if (typeof ajax_helpers === 'undefined') {
       get_content(window_location, false);
     });
 
+    // See ajax_helpers.js: resume_commands runs the responses waiting on ajax_busy as soon as
+    // whatever cleared it asks, instead of up to 100ms later, by when another modal may be on top.
+    var waiting_commands = [];
+
+    function wait_for_ajax_idle(commands) {
+      var waiting = {commands: commands};
+      waiting.timer = window.setTimeout(function () {
+        var index = waiting_commands.indexOf(waiting);
+        if (index > -1) {
+          waiting_commands.splice(index, 1);
+        }
+        process_commands(commands);
+      }, 100);
+      waiting_commands.push(waiting);
+    }
+
+    function resume_commands() {
+      var resuming = waiting_commands;
+      waiting_commands = [];
+      resuming.forEach(function (waiting) {
+        window.clearTimeout(waiting.timer);
+      });
+      resuming.forEach(function (waiting) {
+        process_commands(waiting.commands);
+      });
+    }
+
     function process_commands(commands) {
       if (ajax_helpers.ajax_busy) {
-        window.setTimeout(function () {
-          process_commands(commands);
-        }, 100);
+        wait_for_ajax_idle(commands);
       } else {
         while (commands.length > 0) {
           var command = commands.shift();
           command_functions[command.function](command);
 
           if (ajax_helpers.ajax_busy) {
-            window.setTimeout(function () {
-              process_commands(commands);
-            }, 100);
+            wait_for_ajax_idle(commands);
             break;
           }
         }
@@ -540,6 +563,7 @@ if (typeof ajax_helpers === 'undefined') {
       post_data: post_data,
       command_functions: command_functions,
       process_commands: process_commands,
+      resume_commands: resume_commands,
       tooltip: tooltip,
       ajax_busy: ajax_busy,
       set_ajax_busy: set_ajax_busy,

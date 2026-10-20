@@ -371,19 +371,51 @@ if (typeof ajax_helpers === 'undefined') {
             get_content(window_location, false);
         });
 
+        // A response's commands wait while ajax_busy is set and carry on once it clears. Polling
+        // alone left a gap of up to 100ms between the flag clearing and the commands running, and
+        // the page is not still in that gap: a modal opened in it -- show_modal sets ajax_busy for
+        // its request -- kept them waiting until it was on screen, and they then ran against it.
+        // django_modals holds the commands that follow a close until the modal has gone, so those
+        // were meant for the modal underneath, and a post among them went to the newly opened
+        // modal instead. Whatever clears the flag can now call resume_commands to run the waiting
+        // commands there and then, before anything else can happen; the poll stays for anything
+        // that clears it without calling it.
+        var waiting_commands = [];
+
+        function wait_for_ajax_idle(commands) {
+            var waiting = {commands: commands};
+            waiting.timer = window.setTimeout(function () {
+                var index = waiting_commands.indexOf(waiting);
+                if (index > -1) {
+                    waiting_commands.splice(index, 1);
+                }
+                process_commands(commands)
+            }, 100);
+            waiting_commands.push(waiting);
+        }
+
+        // Runs every waiting response now, oldest first, unless the page is busy again. One that
+        // makes it busy -- another close -- leaves the rest waiting behind it, in order.
+        function resume_commands() {
+            var resuming = waiting_commands;
+            waiting_commands = [];
+            resuming.forEach(function (waiting) {
+                window.clearTimeout(waiting.timer);
+            });
+            resuming.forEach(function (waiting) {
+                process_commands(waiting.commands);
+            });
+        }
+
         function process_commands(commands) {
             if (ajax_helpers.ajax_busy) {
-                window.setTimeout(function () {
-                    process_commands(commands)
-                }, 100)
+                wait_for_ajax_idle(commands);
             } else {
                 while (commands.length > 0) {
                     var command = commands.shift();
                     command_functions[command.function](command);
                     if (ajax_helpers.ajax_busy) {
-                        window.setTimeout(function () {
-                            process_commands(commands)
-                        }, 100);
+                        wait_for_ajax_idle(commands);
                         break;
                     }
                 }
@@ -933,6 +965,7 @@ if (typeof ajax_helpers === 'undefined') {
             post_data,
             command_functions,
             process_commands,
+            resume_commands,
             tooltip,
             remove_tooltip,
             show_toast,
