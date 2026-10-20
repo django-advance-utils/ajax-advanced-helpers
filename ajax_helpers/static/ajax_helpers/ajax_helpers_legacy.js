@@ -278,15 +278,17 @@ if (typeof ajax_helpers === 'undefined') {
       try {
         while (waiting_commands.length > 0 && !ajax_helpers.ajax_busy) {
           var commands = waiting_commands.shift();
-          var behind = waiting_commands.slice();
+          // Nothing leaves the queue while a response runs -- a resume asked for then waits for it --
+          // so whatever it queued is on the end, after the responses that were already behind it.
+          var behind = waiting_commands.length;
           var done = run_commands(commands);
-          var nested = waiting_commands.filter(function (queued) {
-            return behind.indexOf(queued) === -1;
-          });
-          behind = waiting_commands.filter(function (queued) {
-            return behind.indexOf(queued) !== -1;
-          });
-          waiting_commands = nested.concat(done ? [] : [commands], behind);
+          var nested = waiting_commands.splice(behind);
+          if (!done) {
+            nested.push(commands);
+          }
+          if (nested.length > 0) {
+            waiting_commands = nested.concat(waiting_commands);
+          }
         }
       } finally {
         // This loop has done whatever a resume asked for inside it would have.
