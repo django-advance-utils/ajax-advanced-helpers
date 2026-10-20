@@ -3,12 +3,15 @@ import csv
 import json
 import codecs
 import inspect
-from django.http import JsonResponse
+import logging
+from django.http import HttpResponseBadRequest, HttpResponseNotAllowed, JsonResponse
 from django.utils.decorators import method_decorator
 from django.utils.safestring import mark_safe
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from ajax_helpers.utils import ajax_command, is_ajax, json_body
+
+logger = logging.getLogger(__name__)
 
 
 def ajax_method(func):
@@ -41,6 +44,7 @@ class AjaxHelpers:
         return JsonResponse(self.response_commands, safe=False)
 
     def post(self, request, *args, **kwargs):
+        response = None
         if is_ajax(request):
             if request.content_type == 'application/json':
                 response = json_body(request)
@@ -65,6 +69,27 @@ class AjaxHelpers:
         if hasattr(super(), 'post'):
             # noinspection PyUnresolvedReferences
             return super().post(request, *args, **kwargs)
+        return self.unhandled_post(request, response)
+
+    def unhandled_post(self, request, data):
+        """Answers a post that nothing on the view handles.
+
+        It used to fall off the end of post and return None. Django needs a response, and the first middleware
+        to read it failed instead -- ensure_csrf_cookie, with "'NoneType' object has no attribute 'set_cookie'"
+        -- so a request the view simply had no handler for became a 500. The usual one is a post from
+        django_modal.send_inputs, which goes to whichever modal is on top: a field's follow-up request after a
+        picker closes (its details fetch) that reaches the picker while it is still leaving, instead of the
+        form beneath it. A view with no post of its own (a TemplateView) answers that 405, as Django does; an
+        ajax post that names a command this view has no method for is a bad request, and the log says which.
+        """
+        if not is_ajax(request):
+            # noinspection PyUnresolvedReferences
+            allowed = self._allowed_methods() if hasattr(self, '_allowed_methods') else []
+            return HttpResponseNotAllowed([m for m in allowed if m != 'POST'])
+        commands = {t: data[t] for t in sorted(self.command_set) if t in data} if data else {}
+        logger.warning('%s has no handler for the post %s (%s)', type(self).__name__, commands or 'with no command',
+                       request.path)
+        return HttpResponseBadRequest()
 
     def add_page_command(self, function_name, **kwargs):
         if type(function_name) == list:

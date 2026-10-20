@@ -3,7 +3,9 @@ from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 from django.template import Context, Template
 from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.views.generic import TemplateView
 
+from .mixins import AjaxHelpers
 from .utils import is_ajax
 
 INCLUDE = ("{% load ajax_helpers %}"
@@ -72,3 +74,45 @@ class RequestHeaderTests(SimpleTestCase):
     def test_is_ajax_reads_it(self):
         self.assertTrue(is_ajax(RequestFactory().post('/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')))
         self.assertFalse(is_ajax(RequestFactory().post('/')))
+
+
+class Page(AjaxHelpers, TemplateView):
+    """A view with no post of its own above AjaxHelpers, as every template modal is."""
+
+    def button_save(self, **_kwargs):
+        return self.command_response('reload')
+
+
+class UnhandledPostTests(SimpleTestCase):
+    """A post nothing on the view handles is answered, not dropped.
+
+    post used to return None for it, and ensure_csrf_cookie (on AjaxHelpers.dispatch) then failed on
+    response.set_cookie, so the request was a 500 rather than an answer.
+    """
+
+    @staticmethod
+    def post(data, **headers):
+        return Page.as_view()(RequestFactory().post('/page/', data, **headers))
+
+    def test_a_handled_command_still_runs(self):
+        response = self.post({'button': 'save'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'reload', response.content)
+
+    def test_an_ajax_command_with_no_handler_is_a_bad_request(self):
+        with self.assertLogs('ajax_helpers.mixins', 'WARNING') as logged:
+            response = self.post(
+                {'ajax': 'get_details', 'field_id': 'id_colour'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Page has no handler for the post {'ajax': 'get_details'} (/page/)", logged.output[0])
+
+    def test_an_ajax_post_naming_no_command_is_a_bad_request(self):
+        with self.assertLogs('ajax_helpers.mixins', 'WARNING'):
+            response = self.post({}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_plain_post_is_not_allowed(self):
+        response = self.post({'name': 'x'})
+        self.assertEqual(response.status_code, 405)
+        self.assertNotIn('POST', response['Allow'])
