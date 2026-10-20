@@ -258,13 +258,44 @@ if (typeof ajax_helpers === 'undefined') {
       }
     }
 
+    // Runs one response, from the queue or fresh, and puts what it leaves in order. A response that
+    // has started finishes before one that has not, however it started: whatever it queued while it
+    // ran -- the commands an if or an onload runs through process_commands -- goes ahead of what it
+    // leaves of itself, and both go ahead of the responses that were already waiting. Nothing leaves
+    // the queue while a response runs, since a resume asked for then waits for it, so what it queued
+    // is on the end. A nested response (run by a command of another) just queues what it leaves, for
+    // the outermost to put in order.
+    function run_in_order(commands) {
+      if (running > 0) {
+        if (!run_commands(commands)) {
+          waiting_commands.push(commands);
+        }
+        return;
+      }
+      var behind = waiting_commands.length;
+      var done = run_commands(commands);
+      var nested = waiting_commands.splice(behind);
+      if (!done) {
+        nested.push(commands);
+      }
+      if (nested.length > 0) {
+        waiting_commands = nested.concat(waiting_commands);
+      }
+    }
+
+    // A command that throws while the queue drains ends its own response and nothing else. The
+    // drain runs inside whoever asked for it -- Bootstrap dispatching hidden.bs.modal, whose later
+    // listeners jQuery skips once one throws -- so the error goes on to the console and
+    // window.onerror from a timer of its own, as it did when each paused response had one.
+    function rethrow_later(error) {
+      window.setTimeout(function () {
+        throw error;
+      });
+    }
+
     // Runs the waiting responses now, oldest first, until they are done or the page is busy again.
-    // One that makes it busy -- another close -- goes back at the front, so the rest stay behind
-    // it in order. Whatever a response queues while it runs -- the commands an if or an onload
-    // runs through process_commands -- is part of it, so goes ahead of what it leaves of itself,
-    // as each one's own poll used to put it. A response stays queued until its turn, so a command
-    // that throws loses only the rest of its own response: the ones behind it are still waiting,
-    // and the poll is set again for them.
+    // One that makes it busy -- another close -- goes back at the front, so the rest stay behind it
+    // in order.
     function resume_commands() {
       if (running > 0) {
         resume_asked = true;
@@ -277,17 +308,10 @@ if (typeof ajax_helpers === 'undefined') {
       }
       try {
         while (waiting_commands.length > 0 && !ajax_helpers.ajax_busy) {
-          var commands = waiting_commands.shift();
-          // Nothing leaves the queue while a response runs -- a resume asked for then waits for it --
-          // so whatever it queued is on the end, after the responses that were already behind it.
-          var behind = waiting_commands.length;
-          var done = run_commands(commands);
-          var nested = waiting_commands.splice(behind);
-          if (!done) {
-            nested.push(commands);
-          }
-          if (nested.length > 0) {
-            waiting_commands = nested.concat(waiting_commands);
+          try {
+            run_in_order(waiting_commands.shift());
+          } catch (error) {
+            rethrow_later(error);
           }
         }
       } finally {
@@ -301,8 +325,12 @@ if (typeof ajax_helpers === 'undefined') {
 
     function process_commands(commands) {
       try {
-        if (ajax_helpers.ajax_busy || !run_commands(commands)) {
+        if (ajax_helpers.ajax_busy) {
           waiting_commands.push(commands);
+        } else {
+          run_in_order(commands);
+        }
+        if (waiting_commands.length > 0) {
           wait_for_ajax_idle();
         }
       } finally {
@@ -430,6 +458,7 @@ if (typeof ajax_helpers === 'undefined') {
         ajax_helpers.ajax_busy = true;
         window.setTimeout(function () {
           ajax_helpers.ajax_busy = false;
+          resume_commands();
         }, command.time);
       },
       save_file: function save_file(command) {
@@ -604,6 +633,7 @@ if (typeof ajax_helpers === 'undefined') {
     $(document).ajaxError(function () {
       $("html").removeClass("wait");
       ajax_helpers.ajax_busy = false;
+      resume_commands();
     });
     return {
       getCookie: getCookie,
