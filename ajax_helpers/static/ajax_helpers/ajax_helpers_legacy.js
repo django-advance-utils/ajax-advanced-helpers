@@ -223,6 +223,14 @@ if (typeof ajax_helpers === 'undefined') {
     // Paused responses, oldest first, and the one timer that polls for them.
     var waiting_commands = [];
     var waiting_timer = null;
+    // How many responses are running, one inside another, and whether resume_commands was asked
+    // for while they were. A modal whose close finishes at once (no fade) fires hidden.bs.modal
+    // inside the close command, and a resume from there would run the responses behind before the
+    // rest of the one doing the closing -- what comes after a close, meant for the modal beneath,
+    // then ran after a newer show_modal had put another modal on top. So a resume asked for while
+    // a response is running waits until the outermost one has finished or paused.
+    var running = 0;
+    var resume_asked = false;
 
     function wait_for_ajax_idle() {
       if (waiting_timer === null) {
@@ -235,14 +243,19 @@ if (typeof ajax_helpers === 'undefined') {
 
     // Runs a response's commands until they are done (true) or one of them leaves the page busy (false).
     function run_commands(commands) {
-      while (commands.length > 0) {
-        var command = commands.shift();
-        command_functions[command.function](command);
-        if (ajax_helpers.ajax_busy) {
-          return false;
+      running += 1;
+      try {
+        while (commands.length > 0) {
+          var command = commands.shift();
+          command_functions[command.function](command);
+          if (ajax_helpers.ajax_busy) {
+            return false;
+          }
         }
+        return true;
+      } finally {
+        running -= 1;
       }
-      return true;
     }
 
     // Runs the waiting responses now, oldest first, until they are done or the page is busy again.
@@ -253,6 +266,11 @@ if (typeof ajax_helpers === 'undefined') {
     // that throws loses only the rest of its own response: the ones behind it are still waiting,
     // and the poll is set again for them.
     function resume_commands() {
+      if (running > 0) {
+        resume_asked = true;
+        return;
+      }
+      resume_asked = false;
       if (waiting_timer !== null) {
         window.clearTimeout(waiting_timer);
         waiting_timer = null;
@@ -271,6 +289,8 @@ if (typeof ajax_helpers === 'undefined') {
           waiting_commands = nested.concat(done ? [] : [commands], behind);
         }
       } finally {
+        // This loop has done whatever a resume asked for inside it would have.
+        resume_asked = false;
         if (waiting_commands.length > 0) {
           wait_for_ajax_idle();
         }
@@ -278,9 +298,15 @@ if (typeof ajax_helpers === 'undefined') {
     }
 
     function process_commands(commands) {
-      if (ajax_helpers.ajax_busy || !run_commands(commands)) {
-        waiting_commands.push(commands);
-        wait_for_ajax_idle();
+      try {
+        if (ajax_helpers.ajax_busy || !run_commands(commands)) {
+          waiting_commands.push(commands);
+          wait_for_ajax_idle();
+        }
+      } finally {
+        if (running === 0 && resume_asked) {
+          resume_commands();
+        }
       }
     }
 
