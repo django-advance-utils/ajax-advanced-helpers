@@ -112,6 +112,23 @@ class UnhandledPostTests(SimpleTestCase):
             response = self.post({}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 400)
 
+    def test_an_ajax_method_the_view_does_not_have_is_a_bad_request(self):
+        with self.assertLogs('ajax_helpers.mixins', 'WARNING') as logged:
+            response = Page.as_view()(RequestFactory().post(
+                '/page/', '{"ajax_method": "get_details"}', content_type='application/json',
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            ))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Page has no handler for the post {'ajax_method': 'get_details'} (/page/)", logged.output[0])
+
+    def test_a_json_body_that_did_not_arrive_is_answered_without_a_warning(self):
+        # An xhr abandoned after its headers went out: nobody is waiting, so it is not worth a log line.
+        with self.assertNoLogs('ajax_helpers.mixins', 'WARNING'):
+            response = Page.as_view()(RequestFactory().post(
+                '/page/', '{"button": "sa', content_type='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            ))
+        self.assertEqual(response.status_code, 400)
+
     def test_a_plain_post_is_not_allowed(self):
         response = self.post({'name': 'x'})
         self.assertEqual(response.status_code, 405)

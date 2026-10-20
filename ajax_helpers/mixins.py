@@ -54,7 +54,10 @@ class AjaxHelpers:
                 response = None
             if response:
                 if 'ajax_method' in response:
-                    method = getattr(self, response.pop('ajax_method'))
+                    method = getattr(self, response['ajax_method'], None)
+                    if method is None:
+                        return self.unhandled_post(request, response)
+                    del response['ajax_method']
                     if '_ajax' in inspect.signature(method).parameters:
                         return method(**response)
                     else:
@@ -80,13 +83,21 @@ class AjaxHelpers:
         django_modal.send_inputs, which goes to whichever modal is on top: a field's follow-up request after a
         picker closes (its details fetch) that reaches the picker while it is still leaving, instead of the
         form beneath it. A view with no post of its own (a TemplateView) answers that 405, as Django does; an
-        ajax post that names a command this view has no method for is a bad request, and the log says which.
+        ajax post that names a command or ajax_method this view has no method for is a bad request, and the log
+        says which.
+
+        A json post whose body did not arrive intact (json_body gave None: an xhr abandoned after its headers
+        went out, as select2 does to the previous search on every keystroke) is answered the same way but not
+        logged. Nobody is waiting for that answer, and a warning for each would be noise.
         """
         if not is_ajax(request):
             # noinspection PyUnresolvedReferences
             allowed = self._allowed_methods() if hasattr(self, '_allowed_methods') else []
             return HttpResponseNotAllowed([m for m in allowed if m != 'POST'])
-        commands = {t: data[t] for t in sorted(self.command_set) if t in data} if data else {}
+        if data is None and request.content_type == 'application/json':
+            return HttpResponseBadRequest()
+        names = sorted(self.command_set | {'ajax_method'})
+        commands = {t: data[t] for t in names if t in data} if data else {}
         logger.warning('%s has no handler for the post %s (%s)', type(self).__name__, commands or 'with no command',
                        request.path)
         return HttpResponseBadRequest()
