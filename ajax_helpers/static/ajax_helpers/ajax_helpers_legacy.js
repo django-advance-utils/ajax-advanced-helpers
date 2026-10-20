@@ -220,44 +220,59 @@ if (typeof ajax_helpers === 'undefined') {
 
     // See ajax_helpers.js: resume_commands runs the responses waiting on ajax_busy as soon as
     // whatever cleared it asks, instead of up to 100ms later, by when another modal may be on top.
+    // Paused responses, oldest first, and the one timer that polls for them.
     var waiting_commands = [];
+    var waiting_timer = null;
 
-    function wait_for_ajax_idle(commands) {
-      var waiting = {commands: commands};
-      waiting.timer = window.setTimeout(function () {
-        var index = waiting_commands.indexOf(waiting);
-        if (index > -1) {
-          waiting_commands.splice(index, 1);
-        }
-        process_commands(commands);
-      }, 100);
-      waiting_commands.push(waiting);
+    function wait_for_ajax_idle() {
+      if (waiting_timer === null) {
+        waiting_timer = window.setTimeout(function () {
+          waiting_timer = null;
+          resume_commands();
+        }, 100);
+      }
     }
 
+    // Runs a response's commands until they are done (true) or one of them leaves the page busy (false).
+    function run_commands(commands) {
+      while (commands.length > 0) {
+        var command = commands.shift();
+        command_functions[command.function](command);
+        if (ajax_helpers.ajax_busy) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // Runs the waiting responses now, oldest first, until they are done or the page is busy again.
+    // One that makes it busy -- another close -- goes back at the front, so the rest stay behind
+    // it in order. A response stays queued until its turn, so a command that throws loses only
+    // the rest of its own response: the ones behind it are still waiting, and the poll is set
+    // again for them.
     function resume_commands() {
-      var resuming = waiting_commands;
-      waiting_commands = [];
-      resuming.forEach(function (waiting) {
-        window.clearTimeout(waiting.timer);
-      });
-      resuming.forEach(function (waiting) {
-        process_commands(waiting.commands);
-      });
+      if (waiting_timer !== null) {
+        window.clearTimeout(waiting_timer);
+        waiting_timer = null;
+      }
+      try {
+        while (waiting_commands.length > 0 && !ajax_helpers.ajax_busy) {
+          var commands = waiting_commands.shift();
+          if (!run_commands(commands)) {
+            waiting_commands.unshift(commands);
+          }
+        }
+      } finally {
+        if (waiting_commands.length > 0) {
+          wait_for_ajax_idle();
+        }
+      }
     }
 
     function process_commands(commands) {
-      if (ajax_helpers.ajax_busy) {
-        wait_for_ajax_idle(commands);
-      } else {
-        while (commands.length > 0) {
-          var command = commands.shift();
-          command_functions[command.function](command);
-
-          if (ajax_helpers.ajax_busy) {
-            wait_for_ajax_idle(commands);
-            break;
-          }
-        }
+      if (ajax_helpers.ajax_busy || !run_commands(commands)) {
+        waiting_commands.push(commands);
+        wait_for_ajax_idle();
       }
     }
 
