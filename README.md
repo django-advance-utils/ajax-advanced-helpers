@@ -198,6 +198,31 @@ class MyView(AjaxHelpers, TemplateView):
         ...
 ```
 
+#### Permission checks
+
+Name a function in `settings.DJANGO_ADVANCED_PERMISSION_CHECK` and it is asked before the named
+ajax handlers below run:
+
+```python
+DJANGO_ADVANCED_PERMISSION_CHECK = 'myproject.permissions.check'
+
+def check(request, kind, name, obj=None):
+    # ('button', 'approve') before button_approve, ('ajax_method', 'save') before an @ajax_method,
+    # ('form', form_id), ('upload', name), ('file_upload', 'ajax_file'); obj is the view
+    return True
+```
+
+A refused request gets a 200 response carrying a `message` command instead of running the handler
+(a refused tooltip gets the message as text); an error status would reach the page only as a
+generic failure. Override `check_ajax_permission(kind, name)` or `refuse_ajax(kind, name)` on a view
+to decide or answer there instead. The check must not raise.
+
+Only named handlers are asked. A post that falls through to the view's own `post()` -- a form
+submitted to a `FormView`, which is how a django-advanced-modals modal saves -- is not; gate those in
+the view (django-advanced-modals asks the same check in its `dispatch`). With the setting unset
+everything runs. django-advanced-modals and django-advanced-datatables read the same setting, each
+with a `kind` of its own.
+
 ### `ajax_command()` Utility
 
 Build command dicts for use with `add_command()` or in nested command lists.
