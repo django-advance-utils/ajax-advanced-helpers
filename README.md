@@ -223,6 +223,40 @@ the view (django-advanced-modals asks the same check in its `dispatch`). With th
 everything runs. django-advanced-modals and django-advanced-datatables read the same setting, each
 with a `kind` of its own.
 
+#### Which handler answered a request
+
+Every handler a page calls is reached by a POST to the page's own url, so the url does not say which
+one ran. Once this library has chosen a named handler, it has been permitted and its arguments read,
+and just before it runs, two attributes are set on the request:
+
+- `request.ajax_handler`, the method's name: `button_approve`, `tooltip_help`, `action_archive` for a
+  custom command type, `save` for an `@ajax_method`, `form_<form_id>`, `upload_<name>` or
+  `file_upload`. One method reached two ways (as the `button` command `save` and as an
+  `@ajax_method` named `button_save`) is one handler, with one name.
+- `request.ajax_handler_kind`, the route that reached it: the command (`button`, `tooltip`, `action`),
+  `ajax_method`, `form`, `upload` or `file_upload`.
+
+A middleware or a log can read them once the view has answered. They go on the underlying
+`HttpRequest` when a view is handed a wrapper of one (a REST framework `Request`). They are not set on
+a GET, on a refused request, on a handler that does not exist, or on a post that falls through to the
+view's own `post()`. That includes a post a sister package answers in its own `post()` before this
+library dispatches, such as a datatable's fetch of its rows; a handler such a package reaches through
+`AjaxHelpers` (a modal's buttons, a table's `row` commands) is named as any other. A handler that
+dispatches the same request again is named over by the inner one.
+
+```python
+class HandlerLogMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        handler = getattr(request, 'ajax_handler', None)
+        if handler:
+            logger.info('%s (%s) answered %s', handler, request.ajax_handler_kind, request.path)
+        return response
+```
+
 ### `ajax_command()` Utility
 
 Build command dicts for use with `add_command()` or in nested command lists.

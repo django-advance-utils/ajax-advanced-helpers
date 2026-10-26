@@ -19,6 +19,13 @@ def ajax_method(func):
     return method
 
 
+def name_handler(request, kind, name):
+    """Record the handler a request is dispatched to, for middleware to read. See the README."""
+    request = getattr(request, '_request', request)
+    request.ajax_handler = name
+    request.ajax_handler_kind = kind
+
+
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class AjaxHelpers:
     ajax_commands = ['button', 'tooltip', 'timer', 'ajax']
@@ -57,16 +64,18 @@ class AjaxHelpers:
                         return refused
                     method = getattr(self, name)
                     if '_ajax' in inspect.signature(method).parameters:
+                        name_handler(request, 'ajax_method', name)
                         return method(**response)
                     else:
                         raise Exception(f'Method {method.__qualname__} is not enabled for ajax. '
                                         f'Use decorator ajax_method.')
                 else:
                     for t in self.command_set:
-                        if t in response and hasattr(self, f'{t}_{response[t]}'):
+                        if t in response and hasattr(self, name := f'{t}_{response[t]}'):
                             if (refused := refusal(self, t, response[t])) is not None:
                                 return refused
-                            method = getattr(self, f'{t}_{response[t]}')
+                            method = getattr(self, name)
+                            name_handler(request, t, name)
                             del response[t]
                             return method(**response)
         if hasattr(super(), 'post'):
@@ -112,7 +121,10 @@ class ReceiveForm:
             if 'form_id' in request.POST:
                 if (refused := refusal(self, 'form', request.POST['form_id'])) is not None:
                     return refused
-                return getattr(self, f'form_{request.POST["form_id"]}')(**request.POST.dict())
+                name = f'form_{request.POST["form_id"]}'
+                handler = getattr(self, name)
+                name_handler(request, 'form', name)
+                return handler(**request.POST.dict())
         # noinspection PyUnresolvedReferences
         return super().post(request, *args, **kwargs)
 
@@ -143,6 +155,7 @@ class AjaxFileHelpers(AjaxHelpers):
         if is_ajax(request) and request.content_type == 'multipart/form-data' and 'ajax_file' in request.FILES:
             if (refused := refusal(self, 'file_upload', 'ajax_file')) is not None:
                 return refused
+            name_handler(request, 'file_upload', 'file_upload')
             return self.file_upload(request.FILES['ajax_file'])
         return super().post(request, *args, **kwargs)
 
@@ -167,8 +180,13 @@ class AjaxFileUploadMixin:
             upload_params = json.loads(response.get('upload_params', '{}'))
             index = int(response.pop('index'))
             file_info = [f for f in json.loads(response['file_info']) if f['size'] > 0]
-            getattr(self, 'upload_' + request.POST['upload'])(file_info[index]['name'], file_info[index]['size'], file,
-                                                               **upload_params)
+            name = 'upload_' + request.POST['upload']
+            handler = getattr(self, name)
+            info = file_info[index]
+            args = (info['name'], info['size'], file)
+            params = {**upload_params}
+            name_handler(request, 'upload', name)
+            handler(*args, **params)
             if len(file_info) > index + 1:
                 response['upload_params'] = upload_params
                 return self.command_response('upload_file', **self.upload_file_command(index + 1, **response))
