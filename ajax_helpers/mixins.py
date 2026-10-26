@@ -195,9 +195,13 @@ class AjaxFileUploadMixin:
             file_info = [f for f in json.loads(response['file_info']) if f['size'] > 0]
             name = 'upload_' + request.POST['upload']
             handler = getattr(self, name)
-            info = file_info[index]  # Read before naming: a bad index raises here, and nothing ran.
+            # Every argument is read before the handler is named: a bad index, a file entry without its name or
+            # size, or upload params that are not an object raise here, before it is called, and nothing ran.
+            info = file_info[index]
+            args = (info['name'], info['size'], file)
+            params = {**upload_params}
             name_handler(request, 'upload', name)
-            handler(info['name'], info['size'], file, **upload_params)
+            handler(*args, **params)
             if len(file_info) > index + 1:
                 response['upload_params'] = upload_params
                 return self.command_response('upload_file', **self.upload_file_command(index + 1, **response))
