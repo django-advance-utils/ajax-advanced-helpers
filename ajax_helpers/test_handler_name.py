@@ -72,17 +72,16 @@ def handler_of(view, request):
     return request.ajax_handler, request.ajax_handler_kind
 
 
-def upload_request(upload='drawing', index='0'):
-    return RequestFactory().post(
-        '/',
-        data={
-            'ajax_modal_file': SimpleUploadedFile('a.pdf', b'x'),
-            'upload': upload,
-            'index': index,
-            'file_info': json.dumps([{'name': 'a.pdf', 'size': 1}]),
-        },
-        headers=AJAX,
-    )
+def upload_request(upload='drawing', index='0', file_info=None, upload_params=None):
+    data = {
+        'ajax_modal_file': SimpleUploadedFile('a.pdf', b'x'),
+        'upload': upload,
+        'index': index,
+        'file_info': json.dumps(file_info if file_info is not None else [{'name': 'a.pdf', 'size': 1}]),
+    }
+    if upload_params is not None:
+        data['upload_params'] = upload_params
+    return RequestFactory().post('/', data=data, headers=AJAX)
 
 
 class SaveBothWays(PageView):
@@ -133,11 +132,16 @@ class HandlerNameTests(SimpleTestCase):
         self.assertEqual(handler_of(UploadView, upload_request()), ('upload_drawing', 'upload'))
 
     def test_an_upload_whose_arguments_cannot_be_read_names_nothing(self):
-        # An index past the files raises before the handler is called: it did not run.
-        request = upload_request(index='5')
-        with self.assertRaises(IndexError):
-            UploadView.as_view()(request)
-        self.assertFalse(hasattr(request, 'ajax_handler'))
+        # Each raises before the handler is called, as it always did: it did not run, so it is not named.
+        cases = [
+            (upload_request(index='5'), IndexError),
+            (upload_request(file_info=[{'size': 1}]), KeyError),
+            (upload_request(upload_params='[]'), TypeError),
+        ]
+        for request, error in cases:
+            with self.subTest(error=error.__name__), self.assertRaises(error):
+                UploadView.as_view()(request)
+            self.assertFalse(hasattr(request, 'ajax_handler'))
 
     def test_the_name_goes_on_the_request_a_wrapper_wraps(self):
         # A middleware sees the HttpRequest, not the wrapper a view may have been handed.
