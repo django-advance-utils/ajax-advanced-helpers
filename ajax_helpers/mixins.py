@@ -19,6 +19,17 @@ def ajax_method(func):
     return method
 
 
+def name_handler(request, name):
+    """Record on ``request``, as ``request.ajax_handler``, the name of the handler it is being dispatched to.
+
+    Every button press, tooltip, timer tick, form or upload a page sends goes to the page's own url, so
+    the url alone does not say which handler answered it. This is set once the handler is known and
+    permitted, just before it runs, for anything that looks at the request afterwards (a middleware, a
+    log) and wants to know. Nothing in this library reads it.
+    """
+    request.ajax_handler = name
+
+
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class AjaxHelpers:
     ajax_commands = ['button', 'tooltip', 'timer', 'ajax']
@@ -57,6 +68,7 @@ class AjaxHelpers:
                         return refused
                     method = getattr(self, name)
                     if '_ajax' in inspect.signature(method).parameters:
+                        name_handler(request, name)
                         return method(**response)
                     else:
                         raise Exception(f'Method {method.__qualname__} is not enabled for ajax. '
@@ -67,6 +79,7 @@ class AjaxHelpers:
                             if (refused := refusal(self, t, response[t])) is not None:
                                 return refused
                             method = getattr(self, f'{t}_{response[t]}')
+                            name_handler(request, f'{t}_{response[t]}')
                             del response[t]
                             return method(**response)
         if hasattr(super(), 'post'):
@@ -112,6 +125,7 @@ class ReceiveForm:
             if 'form_id' in request.POST:
                 if (refused := refusal(self, 'form', request.POST['form_id'])) is not None:
                     return refused
+                name_handler(request, f'form_{request.POST["form_id"]}')
                 return getattr(self, f'form_{request.POST["form_id"]}')(**request.POST.dict())
         # noinspection PyUnresolvedReferences
         return super().post(request, *args, **kwargs)
@@ -143,6 +157,7 @@ class AjaxFileHelpers(AjaxHelpers):
         if is_ajax(request) and request.content_type == 'multipart/form-data' and 'ajax_file' in request.FILES:
             if (refused := refusal(self, 'file_upload', 'ajax_file')) is not None:
                 return refused
+            name_handler(request, 'file_upload')
             return self.file_upload(request.FILES['ajax_file'])
         return super().post(request, *args, **kwargs)
 
@@ -167,6 +182,7 @@ class AjaxFileUploadMixin:
             upload_params = json.loads(response.get('upload_params', '{}'))
             index = int(response.pop('index'))
             file_info = [f for f in json.loads(response['file_info']) if f['size'] > 0]
+            name_handler(request, 'upload_' + request.POST['upload'])
             getattr(self, 'upload_' + request.POST['upload'])(file_info[index]['name'], file_info[index]['size'], file,
                                                                **upload_params)
             if len(file_info) > index + 1:
