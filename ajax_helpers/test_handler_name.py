@@ -108,6 +108,26 @@ class HandlerNameTests(SimpleTestCase):
         self.assertEqual(json.loads(response.content), {'fell_through': True})
         self.assertFalse(hasattr(request, 'ajax_handler'))
 
+    def test_a_form_or_upload_with_no_such_handler_names_nothing(self):
+        # The lookup fails as it always did; the name of a handler that does not exist is not recorded on the way.
+        form = RequestFactory().post('/', data={'form_id': 'missing'}, headers=AJAX)
+        with self.assertRaises(AttributeError):
+            FormView.as_view()(form)
+        self.assertFalse(hasattr(form, 'ajax_handler'))
+        upload = RequestFactory().post(
+            '/',
+            data={
+                'ajax_modal_file': SimpleUploadedFile('a.pdf', b'x'),
+                'upload': 'missing',
+                'index': '0',
+                'file_info': json.dumps([{'name': 'a.pdf', 'size': 1}]),
+            },
+            headers=AJAX,
+        )
+        with self.assertRaises(AttributeError):
+            UploadView.as_view()(upload)
+        self.assertFalse(hasattr(upload, 'ajax_handler'))
+
     def test_a_get_names_nothing(self):
         request = RequestFactory().get('/', headers=AJAX)
         PageView.as_view()(request)

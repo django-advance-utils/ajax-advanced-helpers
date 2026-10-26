@@ -125,8 +125,10 @@ class ReceiveForm:
             if 'form_id' in request.POST:
                 if (refused := refusal(self, 'form', request.POST['form_id'])) is not None:
                     return refused
-                name_handler(request, f'form_{request.POST["form_id"]}')
-                return getattr(self, f'form_{request.POST["form_id"]}')(**request.POST.dict())
+                name = f'form_{request.POST["form_id"]}'
+                handler = getattr(self, name)
+                name_handler(request, name)
+                return handler(**request.POST.dict())
         # noinspection PyUnresolvedReferences
         return super().post(request, *args, **kwargs)
 
@@ -182,9 +184,10 @@ class AjaxFileUploadMixin:
             upload_params = json.loads(response.get('upload_params', '{}'))
             index = int(response.pop('index'))
             file_info = [f for f in json.loads(response['file_info']) if f['size'] > 0]
-            name_handler(request, 'upload_' + request.POST['upload'])
-            getattr(self, 'upload_' + request.POST['upload'])(file_info[index]['name'], file_info[index]['size'], file,
-                                                               **upload_params)
+            name = 'upload_' + request.POST['upload']
+            handler = getattr(self, name)
+            name_handler(request, name)
+            handler(file_info[index]['name'], file_info[index]['size'], file, **upload_params)
             if len(file_info) > index + 1:
                 response['upload_params'] = upload_params
                 return self.command_response('upload_file', **self.upload_file_command(index + 1, **response))
