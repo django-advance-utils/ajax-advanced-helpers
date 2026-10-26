@@ -20,20 +20,7 @@ def ajax_method(func):
 
 
 def name_handler(request, kind, name):
-    """Record on ``request`` the handler it is being dispatched to: ``ajax_handler``, and ``ajax_handler_kind``.
-
-    Every button press, tooltip, timer tick, form or upload a page sends goes to the page's own url, so
-    the url alone does not say which handler answered it. This is set once the handler is known, permitted
-    and its arguments read, just before it runs, for anything that looks at the request afterwards (a
-    middleware, a log) and wants to know. Nothing in this library reads it.
-
-    ``ajax_handler`` is the method's name, so one method reached two ways (a ``button`` command and an
-    ``@ajax_method`` both reaching ``button_save``) is one handler; ``ajax_handler_kind`` is the route that
-    reached it: the command (``button``, or a prefix the view adds), ``ajax_method``, ``form``, ``upload``
-    or ``file_upload``. Set on the underlying ``HttpRequest`` when the view was handed a wrapper of one (a
-    REST framework ``Request``), which is the request a middleware sees. A handler that dispatches the same
-    request again is named over by the inner one.
-    """
+    """Record the handler a request is dispatched to, for middleware to read. See the README."""
     request = getattr(request, '_request', request)
     request.ajax_handler = name
     request.ajax_handler_kind = kind
@@ -195,8 +182,6 @@ class AjaxFileUploadMixin:
             file_info = [f for f in json.loads(response['file_info']) if f['size'] > 0]
             name = 'upload_' + request.POST['upload']
             handler = getattr(self, name)
-            # Every argument is read before the handler is named: a bad index, a file entry without its name or
-            # size, or upload params that are not an object raise here, before it is called, and nothing ran.
             info = file_info[index]
             args = (info['name'], info['size'], file)
             params = {**upload_params}
