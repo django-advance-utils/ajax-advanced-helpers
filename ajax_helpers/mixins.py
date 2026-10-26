@@ -19,15 +19,24 @@ def ajax_method(func):
     return method
 
 
-def name_handler(request, name):
-    """Record on ``request``, as ``request.ajax_handler``, the name of the handler it is being dispatched to.
+def name_handler(request, kind, name):
+    """Record on ``request`` the handler it is being dispatched to: ``ajax_handler``, and ``ajax_handler_kind``.
 
     Every button press, tooltip, timer tick, form or upload a page sends goes to the page's own url, so
-    the url alone does not say which handler answered it. This is set once the handler is known and
-    permitted, just before it runs, for anything that looks at the request afterwards (a middleware, a
-    log) and wants to know. Nothing in this library reads it.
+    the url alone does not say which handler answered it. This is set once the handler is known, permitted
+    and its arguments read, just before it runs, for anything that looks at the request afterwards (a
+    middleware, a log) and wants to know. Nothing in this library reads it.
+
+    ``ajax_handler`` is the method's name, so one method reached two ways (a ``button`` command and an
+    ``@ajax_method`` both reaching ``button_save``) is one handler; ``ajax_handler_kind`` is the route that
+    reached it: the command (``button``, or a prefix the view adds), ``ajax_method``, ``form``, ``upload``
+    or ``file_upload``. Set on the underlying ``HttpRequest`` when the view was handed a wrapper of one (a
+    REST framework ``Request``), which is the request a middleware sees. A handler that dispatches the same
+    request again is named over by the inner one.
     """
+    request = getattr(request, '_request', request)
     request.ajax_handler = name
+    request.ajax_handler_kind = kind
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -68,18 +77,18 @@ class AjaxHelpers:
                         return refused
                     method = getattr(self, name)
                     if '_ajax' in inspect.signature(method).parameters:
-                        name_handler(request, name)
+                        name_handler(request, 'ajax_method', name)
                         return method(**response)
                     else:
                         raise Exception(f'Method {method.__qualname__} is not enabled for ajax. '
                                         f'Use decorator ajax_method.')
                 else:
                     for t in self.command_set:
-                        if t in response and hasattr(self, f'{t}_{response[t]}'):
+                        if t in response and hasattr(self, name := f'{t}_{response[t]}'):
                             if (refused := refusal(self, t, response[t])) is not None:
                                 return refused
-                            method = getattr(self, f'{t}_{response[t]}')
-                            name_handler(request, f'{t}_{response[t]}')
+                            method = getattr(self, name)
+                            name_handler(request, t, name)
                             del response[t]
                             return method(**response)
         if hasattr(super(), 'post'):
@@ -127,7 +136,7 @@ class ReceiveForm:
                     return refused
                 name = f'form_{request.POST["form_id"]}'
                 handler = getattr(self, name)
-                name_handler(request, name)
+                name_handler(request, 'form', name)
                 return handler(**request.POST.dict())
         # noinspection PyUnresolvedReferences
         return super().post(request, *args, **kwargs)
@@ -159,7 +168,7 @@ class AjaxFileHelpers(AjaxHelpers):
         if is_ajax(request) and request.content_type == 'multipart/form-data' and 'ajax_file' in request.FILES:
             if (refused := refusal(self, 'file_upload', 'ajax_file')) is not None:
                 return refused
-            name_handler(request, 'file_upload')
+            name_handler(request, 'file_upload', 'file_upload')
             return self.file_upload(request.FILES['ajax_file'])
         return super().post(request, *args, **kwargs)
 
@@ -186,8 +195,9 @@ class AjaxFileUploadMixin:
             file_info = [f for f in json.loads(response['file_info']) if f['size'] > 0]
             name = 'upload_' + request.POST['upload']
             handler = getattr(self, name)
-            name_handler(request, name)
-            handler(file_info[index]['name'], file_info[index]['size'], file, **upload_params)
+            info = file_info[index]  # Read before naming: a bad index raises here, and nothing ran.
+            name_handler(request, 'upload', name)
+            handler(info['name'], info['size'], file, **upload_params)
             if len(file_info) > index + 1:
                 response['upload_params'] = upload_params
                 return self.command_response('upload_file', **self.upload_file_command(index + 1, **response))
