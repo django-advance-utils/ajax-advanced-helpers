@@ -923,8 +923,10 @@ ajax_helpers.post_json({
 `error` is called when the request fails: with the response when the server answers with an error
 status, or with `null` when no answer comes (offline, refused, or stopped by the timeout). The busy
 flag and the wait cursor are cleared first, as they are without it. It is not called when the answer
-came and `success` throws: the request worked, and sending it again would repeat it. Without `error`
-a failure is handled as before. In `ajax_helpers_legacy.js` the response is the jqXHR.
+came and its body could not be read, or `success` threw: the request worked, and sending it again
+would repeat it (the exception is logged to the console). Without `error` a failure is handled as
+before. `ajax_helpers_legacy.js` behaves the same, with the jqXHR as the response, except that a
+`success` that throws is left to jQuery as before: uncaught, and the busy flag not cleared.
 
 ### `ajax_helpers.send_form(form_id, extra_data)`
 

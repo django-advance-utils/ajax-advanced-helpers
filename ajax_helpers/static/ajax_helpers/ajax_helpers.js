@@ -168,7 +168,9 @@ if (typeof ajax_helpers === 'undefined') {
             } else {
                 body_promise = response.text();
             }
-            body_promise.then(function (body) {
+            // Returned, so a body that cannot be read or a success that throws reaches the
+            // caller's .catch (fetch_request) rather than going unhandled.
+            return body_promise.then(function (body) {
                 success(body, 'success', fake_xhr);
             });
         }
@@ -227,14 +229,17 @@ if (typeof ajax_helpers === 'undefined') {
                     failed(response);
                     return;
                 }
-                dispatch_fetch(response, config.success || from_django, config.response_type);
+                return dispatch_fetch(response, config.success || from_django, config.response_type);
             }, function () {
                 if (timer) clearTimeout(timer);
                 failed(null);
-            }).catch(function () {
-                // The answer came, and handling it threw: not a failed request, so error is not
-                // told -- a caller sending again would repeat a request that worked.
+            }).catch(function (e) {
+                // The answer came and handling it threw -- its body could not be read, or the
+                // caller's success threw -- or the caller's own error threw. Not a failed request,
+                // so error is not told (a caller sending again would repeat a request that
+                // worked); the busy flag is cleared, and the exception is shown, not swallowed.
                 ajax_error();
+                console.error(e);
             });
         }
 
