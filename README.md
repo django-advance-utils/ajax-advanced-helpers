@@ -912,7 +912,19 @@ ajax_helpers.post_json({data: {button: 'export'}, response_type: 'blob'})
 
 // Custom success handler
 ajax_helpers.post_json({data: {button: 'check'}, success: function(data) { console.log(data) }})
+
+// Told when it fails: keep what was being saved, and send it again
+ajax_helpers.post_json({
+    data: {button: 'save', pk: 42},
+    error: function(response) { /* response: the server's error answer, or null if none came */ },
+})
 ```
+
+`error` is called when the request fails: with the response when the server answers with an error
+status, or with `null` when no answer comes (offline, refused, or stopped by the timeout). The busy
+flag and the wait cursor are cleared first, as they are without it. It is not called when the answer
+came and `success` throws: the request worked, and sending it again would repeat it. Without `error`
+a failure is handled as before. In `ajax_helpers_legacy.js` the response is the jqXHR.
 
 ### `ajax_helpers.send_form(form_id, extra_data)`
 

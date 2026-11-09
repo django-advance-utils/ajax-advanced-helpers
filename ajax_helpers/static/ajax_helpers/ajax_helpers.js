@@ -214,15 +214,26 @@ if (typeof ajax_helpers === 'undefined') {
                     controller.abort();
                 }, config.timeout);
             }
+            // A request that failed: the server answered with an error (its response), or no answer
+            // came -- offline, refused, or stopped by the timeout (null). The caller's error, if it
+            // gave one, is told after the busy flag is cleared.
+            function failed(response) {
+                ajax_error();
+                if (config.error) config.error(response);
+            }
             fetch(config.url, init).then(function (response) {
                 if (timer) clearTimeout(timer);
                 if (!response.ok) {
-                    ajax_error();
+                    failed(response);
                     return;
                 }
                 dispatch_fetch(response, config.success || from_django, config.response_type);
-            }).catch(function () {
+            }, function () {
                 if (timer) clearTimeout(timer);
+                failed(null);
+            }).catch(function () {
+                // The answer came, and handling it threw: not a failed request, so error is not
+                // told -- a caller sending again would repeat a request that worked.
                 ajax_error();
             });
         }
@@ -305,7 +316,7 @@ if (typeof ajax_helpers === 'undefined') {
             if (timeout === undefined) {
                 var timeout = 0
             }
-            var url, data, success;
+            var url, data, success, error;
             var response_type = 'text';
             if (typeof (ajax_data) === 'object') {
                 if (ajax_data.url !== undefined) {
@@ -314,6 +325,9 @@ if (typeof ajax_helpers === 'undefined') {
                 data = ajax_data.data;
                 if (ajax_data.success !== undefined) {
                     success = ajax_data.success
+                }
+                if (ajax_data.error !== undefined) {
+                    error = ajax_data.error
                 }
                 if (ajax_data.response_type !== undefined) {
                     response_type = ajax_data.response_type;
@@ -336,6 +350,7 @@ if (typeof ajax_helpers === 'undefined') {
                 body: JSON.stringify(data),
                 contentType: 'application/json',
                 success: success,
+                error: error,
                 response_type: response_type,
                 timeout: timeout,
             });
