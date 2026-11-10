@@ -925,8 +925,7 @@ status, or with `null` when no answer comes (offline, refused, or stopped by the
 flag and the wait cursor are cleared first, as they are without it. It is not called when the answer
 came and its body could not be read, or `success` threw: the request worked, and sending it again
 would repeat it (the exception is logged to the console). Without `error` a failure is handled as
-before. `ajax_helpers_legacy.js` behaves the same, with the jqXHR as the response, except that a
-`success` that throws is left to jQuery as before: uncaught, and the busy flag not cleared.
+before.
 
 ### `ajax_helpers.send_form(form_id, extra_data)`
 
