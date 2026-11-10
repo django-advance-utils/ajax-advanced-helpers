@@ -913,23 +913,34 @@ ajax_helpers.post_json({data: {button: 'export'}, response_type: 'blob'})
 // Custom success handler
 ajax_helpers.post_json({data: {button: 'check'}, success: function(data) { console.log(data) }})
 
-// Told when it fails: keep what was being saved, and send it again
+// Told when it fails
 ajax_helpers.post_json({
     data: {button: 'save', pk: 42},
-    error: function(response) { /* response: the server's error answer, or null if none came */ },
+    error: function(response, reason) { /* see below */ },
 })
 ```
 
-`error` is called when the request fails: with the response when the server answers with an error
-status, or with `null` when no answer comes (offline, refused, or stopped by the timeout). The busy
-flag and the wait cursor are cleared first, as they are without it. It is not called when the answer
-came and its body could not be read, or `success` threw: the request worked, and sending it again
-would repeat it (the exception is logged to the console). Without `error` a failure is handled as
-before.
+`error(response, reason)` is called once whenever `success` is not, after the busy flag and the wait
+cursor are cleared:
 
-### `ajax_helpers.send_form(form_id, extra_data)`
+| `reason` | `response` | When |
+|----------|------------|------|
+| `'status'` | the response | The server answered with an error status |
+| `'body'` | the response | The server answered, but the body could not be read or parsed |
+| `'timeout'` | `null` | The timeout ran out |
+| `'network'` | `null` | No answer: offline, refused, or the connection dropped |
 
-Submit a form as `FormData` via AJAX POST.
+None of these prove the server did nothing: a timeout or a dropped connection can come after it has
+saved. Send the request again only if the handler is safe to repeat. If `success` itself throws, the
+exception is logged to the console and `error` is not called. Without `error` a failure is handled
+as before.
+
+The response is a fetch `Response` from `post_json` and `get_content`, and the `XMLHttpRequest`
+from `post_data` and `send_form`. Only `.status` reads the same on both.
+
+### `ajax_helpers.send_form(form_id, extra_data, timeout, options)`
+
+Submit a form as `FormData` via AJAX POST. `timeout` and `options` are passed to `post_data`.
 
 ```javascript
 ajax_helpers.send_form('my-form', {extra_field: 'value'})
@@ -941,13 +952,15 @@ POST `FormData` to a URL with optional progress tracking.
 
 ```javascript
 ajax_helpers.post_data('/upload/', formData, 0, {
-    progress: {selector: '#progress-bar'}
+    progress: {selector: '#progress-bar'},
+    error: function(xhr, reason) { /* as for post_json */ },
 })
 ```
 
-### `ajax_helpers.get_content(url)`
+### `ajax_helpers.get_content(url, store, error)`
 
-Load a page via AJAX and push to browser history (SPA-style navigation).
+Load a page via AJAX and push to browser history (SPA-style navigation). `store` (default `true`)
+pushes the URL to the history. `error` is called as for `post_json`.
 
 ```javascript
 ajax_helpers.get_content('/dashboard/')

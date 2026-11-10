@@ -144,7 +144,7 @@ if (typeof ajax_helpers === 'undefined') {
 
         // Reads a fetch Response body in the same way jQuery auto-detected it:
         // attachment -> blob, application/json -> parsed object, otherwise text.
-        function dispatch_fetch(response, success, response_type) {
+        function dispatch_fetch(response, success, response_type, body_failed) {
             var headers = response.headers;
             // Stands in for the jqXHR jQuery handed success: the status as well as the headers, as
             // a caller reading xhr.status off it got before the fetch path existed.
@@ -168,11 +168,9 @@ if (typeof ajax_helpers === 'undefined') {
             } else {
                 body_promise = response.text();
             }
-            // Returned, so a body that cannot be read or a success that throws reaches the
-            // caller's .catch (fetch_request) rather than going unhandled.
             return body_promise.then(function (body) {
                 success(body, 'success', fake_xhr);
-            });
+            }, body_failed);
         }
 
         // jQuery sent X-Requested-With only to its own origin. On a cross-origin request
@@ -209,35 +207,32 @@ if (typeof ajax_helpers === 'undefined') {
                 init.body = config.body;
             }
             var timer;
+            var timed_out = false;
             if (config.timeout) {
                 var controller = new AbortController();
                 init.signal = controller.signal;
                 timer = window.setTimeout(function () {
+                    timed_out = true;
                     controller.abort();
                 }, config.timeout);
             }
-            // A request that failed: the server answered with an error (its response), or no answer
-            // came -- offline, refused, or stopped by the timeout (null). The caller's error, if it
-            // gave one, is told after the busy flag is cleared.
-            function failed(response) {
+            function failed(response, reason) {
                 ajax_error();
-                if (config.error) config.error(response);
+                if (config.error) config.error(response, reason);
             }
             fetch(config.url, init).then(function (response) {
                 if (timer) clearTimeout(timer);
                 if (!response.ok) {
-                    failed(response);
+                    failed(response, 'status');
                     return;
                 }
-                return dispatch_fetch(response, config.success || from_django, config.response_type);
+                return dispatch_fetch(response, config.success || from_django, config.response_type, function () {
+                    failed(response, 'body');
+                });
             }, function () {
                 if (timer) clearTimeout(timer);
-                failed(null);
+                failed(null, timed_out ? 'timeout' : 'network');
             }).catch(function (e) {
-                // The answer came and handling it threw -- its body could not be read, or the
-                // caller's success threw -- or the caller's own error threw. Not a failed request,
-                // so error is not told (a caller sending again would repeat a request that
-                // worked); the busy flag is cleared, and the exception is shown, not swallowed.
                 ajax_error();
                 console.error(e);
             });
@@ -272,29 +267,54 @@ if (typeof ajax_helpers === 'undefined') {
                     }
                 });
             }
+            var on_error = options !== undefined ? options.error : undefined;
+            function failed(response, reason) {
+                ajax_error();
+                if (on_error) on_error(response, reason);
+            }
             xhr.onload = function () {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    dispatch_xhr(xhr, from_django);
+                    dispatch_xhr(xhr, from_django, function () {
+                        failed(xhr, 'body');
+                    });
                 } else {
-                    ajax_error();
+                    failed(xhr, 'status');
                 }
             };
-            xhr.onerror = ajax_error;
-            xhr.ontimeout = ajax_error;
-            xhr.send(data);
+            xhr.onerror = function () {
+                failed(null, 'network');
+            };
+            xhr.ontimeout = function () {
+                failed(null, 'timeout');
+            };
+            try {
+                xhr.send(data);
+            } catch (e) {
+                failed(null, 'network');
+            }
         }
 
-        function dispatch_xhr(xhr, success) {
+        function dispatch_xhr(xhr, success, body_failed) {
             var content_type = xhr.getResponseHeader('Content-Type') || '';
             var body;
-            if (contains_file(xhr)) {
-                body = xhr.response;
-            } else if (content_type.indexOf('application/json') > -1) {
-                body = JSON.parse(xhr.responseText);
-            } else {
-                body = xhr.responseText;
+            try {
+                if (contains_file(xhr)) {
+                    body = xhr.response;
+                } else if (content_type.indexOf('application/json') > -1) {
+                    body = JSON.parse(xhr.responseText);
+                } else {
+                    body = xhr.responseText;
+                }
+            } catch (e) {
+                body_failed();
+                return;
             }
-            success(body, 'success', xhr);
+            try {
+                success(body, 'success', xhr);
+            } catch (e) {
+                ajax_error();
+                console.error(e);
+            }
         }
 
         // What jQuery's .val(value) did. A list selects every option of a <select> whose value is in it,
@@ -331,9 +351,7 @@ if (typeof ajax_helpers === 'undefined') {
                 if (ajax_data.success !== undefined) {
                     success = ajax_data.success
                 }
-                if (ajax_data.error !== undefined) {
-                    error = ajax_data.error
-                }
+                error = ajax_data.error;
                 if (ajax_data.response_type !== undefined) {
                     response_type = ajax_data.response_type;
                 }
@@ -369,7 +387,7 @@ if (typeof ajax_helpers === 'undefined') {
             }
         }
 
-        function get_content(url, store = true) {
+        function get_content(url, store = true, error) {
             remove_tooltip();
             if (store) {
                 history.pushState(null, "", url);
@@ -379,6 +397,7 @@ if (typeof ajax_helpers === 'undefined') {
                 url: url,
                 method: 'get',
                 success: from_django,
+                error: error,
             });
         }
 
