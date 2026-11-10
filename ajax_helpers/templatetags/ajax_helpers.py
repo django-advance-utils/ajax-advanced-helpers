@@ -24,25 +24,17 @@ def lib_include(context, *args, **kwargs):
     The scope is one render: the template rendered, the ones it extends and the ones it includes. A fragment
     rendered on its own, such as a modal body or an ajax response, includes its libraries again.
     """
-    request = context.get('request')
-    legacy = False
-    if request:
-        user_agent = request.META.get('HTTP_USER_AGENT', '')
-        if 'Trident' in user_agent or 'MSIE' in user_agent:
-            legacy = True
     included = _libraries_included(context)
     include_str = ''
     if not args:
         include_str = html_include(cdn=kwargs.get('cdn'),
                                    module=kwargs.get('module'),
-                                   legacy=legacy,
                                    version=kwargs.get('version'),
                                    included=included)
     for a in args:
         include_str += html_include(a,
                                     cdn=kwargs.get('cdn'),
                                     module=kwargs.get('module'),
-                                    legacy=legacy,
                                     version=kwargs.get('version'),
                                     included=included)
     return mark_safe(include_str)
