@@ -144,7 +144,7 @@ if (typeof ajax_helpers === 'undefined') {
 
         // Reads a fetch Response body in the same way jQuery auto-detected it:
         // attachment -> blob, application/json -> parsed object, otherwise text.
-        function dispatch_fetch(response, success, response_type) {
+        function dispatch_fetch(response, success, response_type, body_failed) {
             var headers = response.headers;
             // Stands in for the jqXHR jQuery handed success: the status as well as the headers, as
             // a caller reading xhr.status off it got before the fetch path existed.
@@ -168,9 +168,9 @@ if (typeof ajax_helpers === 'undefined') {
             } else {
                 body_promise = response.text();
             }
-            body_promise.then(function (body) {
+            return body_promise.then(function (body) {
                 success(body, 'success', fake_xhr);
-            });
+            }, body_failed);
         }
 
         // jQuery sent X-Requested-With only to its own origin. On a cross-origin request
@@ -207,23 +207,41 @@ if (typeof ajax_helpers === 'undefined') {
                 init.body = config.body;
             }
             var timer;
+            var timed_out = false;
             if (config.timeout) {
                 var controller = new AbortController();
                 init.signal = controller.signal;
                 timer = window.setTimeout(function () {
+                    timed_out = true;
                     controller.abort();
                 }, config.timeout);
             }
-            fetch(config.url, init).then(function (response) {
+            function stop_timer() {
                 if (timer) clearTimeout(timer);
+            }
+            function failed(response, reason) {
+                stop_timer();
+                ajax_error();
+                if (config.error) config.error(response, reason);
+            }
+            fetch(config.url, init).then(function (response) {
                 if (!response.ok) {
-                    ajax_error();
+                    failed(response, 'status');
                     return;
                 }
-                dispatch_fetch(response, config.success || from_django, config.response_type);
-            }).catch(function () {
-                if (timer) clearTimeout(timer);
+                return dispatch_fetch(response, config.success || from_django, config.response_type, function () {
+                    if (timed_out) {
+                        failed(null, 'timeout');
+                    } else {
+                        failed(response, 'body');
+                    }
+                }).then(stop_timer);
+            }, function () {
+                failed(null, timed_out ? 'timeout' : 'network');
+            }).catch(function (e) {
+                stop_timer();
                 ajax_error();
+                console.error(e);
             });
         }
 
@@ -256,29 +274,59 @@ if (typeof ajax_helpers === 'undefined') {
                     }
                 });
             }
+            var on_error = options !== undefined ? options.error : undefined;
+            function failed(response, reason) {
+                ajax_error();
+                if (!on_error) return;
+                try {
+                    on_error(response, reason);
+                } catch (e) {
+                    console.error(e);
+                }
+            }
             xhr.onload = function () {
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    dispatch_xhr(xhr, from_django);
+                    dispatch_xhr(xhr, from_django, function () {
+                        failed(xhr, 'body');
+                    });
                 } else {
-                    ajax_error();
+                    failed(xhr, 'status');
                 }
             };
-            xhr.onerror = ajax_error;
-            xhr.ontimeout = ajax_error;
-            xhr.send(data);
+            xhr.onerror = function () {
+                failed(null, 'network');
+            };
+            xhr.ontimeout = function () {
+                failed(null, 'timeout');
+            };
+            try {
+                xhr.send(data);
+            } catch (e) {
+                failed(null, 'network');
+            }
         }
 
-        function dispatch_xhr(xhr, success) {
+        function dispatch_xhr(xhr, success, body_failed) {
             var content_type = xhr.getResponseHeader('Content-Type') || '';
             var body;
-            if (contains_file(xhr)) {
-                body = xhr.response;
-            } else if (content_type.indexOf('application/json') > -1) {
-                body = JSON.parse(xhr.responseText);
-            } else {
-                body = xhr.responseText;
+            try {
+                if (contains_file(xhr)) {
+                    body = xhr.response;
+                } else if (content_type.indexOf('application/json') > -1) {
+                    body = JSON.parse(xhr.responseText);
+                } else {
+                    body = xhr.responseText;
+                }
+            } catch (e) {
+                body_failed();
+                return;
             }
-            success(body, 'success', xhr);
+            try {
+                success(body, 'success', xhr);
+            } catch (e) {
+                ajax_error();
+                console.error(e);
+            }
         }
 
         // What jQuery's .val(value) did. A list selects every option of a <select> whose value is in it,
@@ -305,7 +353,7 @@ if (typeof ajax_helpers === 'undefined') {
             if (timeout === undefined) {
                 var timeout = 0
             }
-            var url, data, success;
+            var url, data, success, error;
             var response_type = 'text';
             if (typeof (ajax_data) === 'object') {
                 if (ajax_data.url !== undefined) {
@@ -315,6 +363,7 @@ if (typeof ajax_helpers === 'undefined') {
                 if (ajax_data.success !== undefined) {
                     success = ajax_data.success
                 }
+                error = ajax_data.error;
                 if (ajax_data.response_type !== undefined) {
                     response_type = ajax_data.response_type;
                 }
@@ -336,6 +385,7 @@ if (typeof ajax_helpers === 'undefined') {
                 body: JSON.stringify(data),
                 contentType: 'application/json',
                 success: success,
+                error: error,
                 response_type: response_type,
                 timeout: timeout,
             });
@@ -349,7 +399,7 @@ if (typeof ajax_helpers === 'undefined') {
             }
         }
 
-        function get_content(url, store = true) {
+        function get_content(url, store = true, error) {
             remove_tooltip();
             if (store) {
                 history.pushState(null, "", url);
@@ -359,6 +409,7 @@ if (typeof ajax_helpers === 'undefined') {
                 url: url,
                 method: 'get',
                 success: from_django,
+                error: error,
             });
         }
 
