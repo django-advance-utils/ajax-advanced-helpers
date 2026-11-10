@@ -926,13 +926,13 @@ cursor are cleared:
 | `reason` | `response` | When |
 |----------|------------|------|
 | `'status'` | the response | The server answered with an error status |
-| `'body'` | the response | The server answered, but the body could not be read or parsed |
-| `'timeout'` | `null` | The timeout ran out |
+| `'body'` | the response | The server answered, but the body could not be parsed, or the connection dropped while it was read |
+| `'timeout'` | `null` | The timeout ran out, before or while the body was read |
 | `'network'` | `null` | No answer: offline, refused, or the connection dropped |
 
 None of these prove the server did nothing: a timeout or a dropped connection can come after it has
 saved. Send the request again only if the handler is safe to repeat. If `success` itself throws, the
-exception is logged to the console and `error` is not called. Without `error` a failure is handled
+exception is logged to the console and `error` is not called; so is an exception thrown by `error`. Without `error` a failure is handled
 as before.
 
 The response is a fetch `Response` from `post_json` and `get_content`, and the `XMLHttpRequest`

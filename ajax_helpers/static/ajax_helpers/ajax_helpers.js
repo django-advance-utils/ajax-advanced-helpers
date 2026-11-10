@@ -216,23 +216,30 @@ if (typeof ajax_helpers === 'undefined') {
                     controller.abort();
                 }, config.timeout);
             }
+            function stop_timer() {
+                if (timer) clearTimeout(timer);
+            }
             function failed(response, reason) {
+                stop_timer();
                 ajax_error();
                 if (config.error) config.error(response, reason);
             }
             fetch(config.url, init).then(function (response) {
-                if (timer) clearTimeout(timer);
                 if (!response.ok) {
                     failed(response, 'status');
                     return;
                 }
                 return dispatch_fetch(response, config.success || from_django, config.response_type, function () {
-                    failed(response, 'body');
-                });
+                    if (timed_out) {
+                        failed(null, 'timeout');
+                    } else {
+                        failed(response, 'body');
+                    }
+                }).then(stop_timer);
             }, function () {
-                if (timer) clearTimeout(timer);
                 failed(null, timed_out ? 'timeout' : 'network');
             }).catch(function (e) {
+                stop_timer();
                 ajax_error();
                 console.error(e);
             });
@@ -270,7 +277,12 @@ if (typeof ajax_helpers === 'undefined') {
             var on_error = options !== undefined ? options.error : undefined;
             function failed(response, reason) {
                 ajax_error();
-                if (on_error) on_error(response, reason);
+                if (!on_error) return;
+                try {
+                    on_error(response, reason);
+                } catch (e) {
+                    console.error(e);
+                }
             }
             xhr.onload = function () {
                 if (xhr.status >= 200 && xhr.status < 300) {
