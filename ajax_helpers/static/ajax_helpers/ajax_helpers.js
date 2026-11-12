@@ -490,27 +490,30 @@ if (typeof ajax_helpers === 'undefined') {
         function position_tooltip(tip, target, placement) {
             var rect = target.getBoundingClientRect();
             var sx = window.pageXOffset, sy = window.pageYOffset;
-            // Measured at the corner each time: near the window's edge a placed tip is narrowed, and measuring
-            // it there would move it again, and resize it again.
+            // The width is measured at the corner, where nothing narrows the tip, so placing it again finds the
+            // same left. The height is measured once it is there: a tip the window's edge narrows wraps, taller.
             tip.style.top = '0';
             tip.style.left = '0';
-            var tw = tip.offsetWidth, th = tip.offsetHeight;
-            var top, left;
-            if (placement === 'top') {
-                top = rect.top + sy - th;
-                left = rect.left + sx + rect.width / 2 - tw / 2;
-            } else if (placement === 'left') {
-                top = rect.top + sy + rect.height / 2 - th / 2;
+            var tw = tip.offsetWidth;
+            var left;
+            if (placement === 'left') {
                 left = rect.left + sx - tw;
             } else if (placement === 'right') {
-                top = rect.top + sy + rect.height / 2 - th / 2;
                 left = rect.right + sx;
             } else {
-                top = rect.bottom + sy;
                 left = rect.left + sx + rect.width / 2 - tw / 2;
             }
-            tip.style.top = Math.round(top) + 'px';
             tip.style.left = Math.round(left) + 'px';
+            var th = tip.offsetHeight;
+            var top;
+            if (placement === 'top') {
+                top = rect.top + sy - th;
+            } else if (placement === 'left' || placement === 'right') {
+                top = rect.top + sy + rect.height / 2 - th / 2;
+            } else {
+                top = rect.bottom + sy;
+            }
+            tip.style.top = Math.round(top) + 'px';
         }
 
         function tooltip(selector, function_name, placement, template) {
