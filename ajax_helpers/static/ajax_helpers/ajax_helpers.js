@@ -564,7 +564,13 @@ if (typeof ajax_helpers === 'undefined') {
                             // Placed again whenever its size changes: an image, or a script loaded from a url.
                             if (window.ResizeObserver) {
                                 tooltip_resize_observer = new ResizeObserver(function () {
-                                    position_tooltip(tip, el, placement);
+                                    // In the next frame: placing it here can change its size again, which
+                                    // the browser reports as a ResizeObserver loop error.
+                                    window.requestAnimationFrame(function () {
+                                        if (active_tooltip === tip) {
+                                            position_tooltip(tip, el, placement);
+                                        }
+                                    });
                                 });
                                 tooltip_resize_observer.observe(tip);
                             }
