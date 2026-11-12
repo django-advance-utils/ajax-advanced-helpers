@@ -451,51 +451,94 @@ if (typeof ajax_helpers === 'undefined') {
         }
 
         var active_tooltip = null;
+        var active_tooltip_element = null;
         var tooltip_hide_timer = null;
+        var tooltip_resize_observer = null;
 
         function remove_tooltip() {
             if (tooltip_hide_timer) {
                 clearTimeout(tooltip_hide_timer);
                 tooltip_hide_timer = null;
             }
+            if (tooltip_resize_observer) {
+                tooltip_resize_observer.disconnect();
+                tooltip_resize_observer = null;
+            }
             if (active_tooltip) {
                 active_tooltip.remove();
                 active_tooltip = null;
+                active_tooltip_element = null;
+            }
+        }
+
+        // Left with a short delay, so the pointer can cross a gap between the element and its tip, or between
+        // a button in the tip and a menu it opens just outside it.
+        function remove_tooltip_soon() {
+            if (tooltip_hide_timer) {
+                clearTimeout(tooltip_hide_timer);
+            }
+            tooltip_hide_timer = window.setTimeout(remove_tooltip, 100);
+        }
+
+        function keep_tooltip() {
+            if (tooltip_hide_timer) {
+                clearTimeout(tooltip_hide_timer);
+                tooltip_hide_timer = null;
             }
         }
 
         function position_tooltip(tip, target, placement) {
             var rect = target.getBoundingClientRect();
             var sx = window.pageXOffset, sy = window.pageYOffset;
-            var tw = tip.offsetWidth, th = tip.offsetHeight;
-            var top, left;
-            if (placement === 'top') {
-                top = rect.top + sy - th;
-                left = rect.left + sx + rect.width / 2 - tw / 2;
-            } else if (placement === 'left') {
-                top = rect.top + sy + rect.height / 2 - th / 2;
+            // The width is measured at the corner, where nothing narrows the tip, so placing it again finds the
+            // same left. The height is measured once it is there: a tip the window's edge narrows wraps, taller.
+            tip.style.top = '0';
+            tip.style.left = '0';
+            var tw = tip.offsetWidth;
+            var left;
+            if (placement === 'left') {
                 left = rect.left + sx - tw;
             } else if (placement === 'right') {
-                top = rect.top + sy + rect.height / 2 - th / 2;
                 left = rect.right + sx;
             } else {
-                top = rect.bottom + sy;
                 left = rect.left + sx + rect.width / 2 - tw / 2;
             }
-            tip.style.top = Math.round(top) + 'px';
             tip.style.left = Math.round(left) + 'px';
+            var th = tip.offsetHeight;
+            var top;
+            if (placement === 'top') {
+                top = rect.top + sy - th;
+            } else if (placement === 'left' || placement === 'right') {
+                top = rect.top + sy + rect.height / 2 - th / 2;
+            } else {
+                top = rect.bottom + sy;
+            }
+            tip.style.top = Math.round(top) + 'px';
         }
 
         function tooltip(selector, function_name, placement, template) {
             placement = placement ? placement : "bottom";
             template = template ? template : '<div class="ah-tooltip" role="tooltip"><div class="ah-arrow"></div><div class="ah-tooltip-inner"></div></div>';
             document.querySelectorAll(selector).forEach(function (el) {
+                var hovered = false;
                 el.addEventListener('mouseenter', function () {
+                    hovered = true;
+                    if (active_tooltip && active_tooltip_element === el) {
+                        // Back on its element before the tip has gone (the pointer crossing it between a button
+                        // in the tip and a menu that button opened): the tip stays as it is, menu open.
+                        keep_tooltip();
+                        return;
+                    }
                     var element_data = Object.assign({}, el.dataset);
                     element_data['tooltip'] = function_name;
                     ajax_helpers.post_json({
                         data: element_data,
                         success: function (data) {
+                            // An answer that comes once the pointer has gone is dropped: shown then, the tip
+                            // would stay up, as the pointer is never over it to leave it.
+                            if (!hovered) {
+                                return;
+                            }
                             remove_tooltip();
                             var wrapper = document.createElement('div');
                             wrapper.innerHTML = template.trim();
@@ -512,22 +555,36 @@ if (typeof ajax_helpers === 'undefined') {
                             tip.style.top = '0';
                             tip.style.left = '0';
                             var inner = tip.querySelector('.ah-tooltip-inner') || tip.querySelector('.tooltip-inner') || tip;
-                            inner.innerHTML = data;
                             document.body.appendChild(tip);
-                            position_tooltip(tip, el, placement);
                             active_tooltip = tip;
-                            tip.addEventListener('mouseenter', function () {
-                                if (tooltip_hide_timer) {
-                                    clearTimeout(tooltip_hide_timer);
-                                    tooltip_hide_timer = null;
-                                }
-                            });
-                            tip.addEventListener('mouseleave', remove_tooltip);
+                            active_tooltip_element = el;
+                            // In the document first, so the content's scripts can find their elements by id.
+                            set_html(inner, data);
+                            if (active_tooltip !== tip) {
+                                return;  // a script in the content removed it
+                            }
+                            position_tooltip(tip, el, placement);
+                            // Placed again whenever its size changes: an image, or a script loaded from a url.
+                            if (window.ResizeObserver) {
+                                tooltip_resize_observer = new ResizeObserver(function () {
+                                    // In the next frame: placing it here can change its size again, which
+                                    // the browser reports as a ResizeObserver loop error.
+                                    window.requestAnimationFrame(function () {
+                                        if (active_tooltip === tip) {
+                                            position_tooltip(tip, el, placement);
+                                        }
+                                    });
+                                });
+                                tooltip_resize_observer.observe(tip);
+                            }
+                            tip.addEventListener('mouseenter', keep_tooltip);
+                            tip.addEventListener('mouseleave', remove_tooltip_soon);
                         }
                     });
                 });
                 el.addEventListener('mouseleave', function () {
-                    tooltip_hide_timer = window.setTimeout(remove_tooltip, 100);
+                    hovered = false;
+                    remove_tooltip_soon();
                 });
             });
         }
