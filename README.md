@@ -169,6 +169,9 @@ def tooltip_info(self, **kwargs):
 
 The html goes into the tooltip as it is. Any `<script>` in it runs once the tooltip is on the page, so content
 that sets itself up with a script, such as a dropdown menu, works in a tooltip as it does in an html command.
+A script runs each time the tooltip is shown, so it should bind only to elements inside the tooltip: whatever
+it adds to the document or the window stays after the tooltip has gone. An answer that comes after the pointer
+has left the element is not shown.
 
 **Timer handlers** — when the POST data contains `{timer: "name"}`:
 
