@@ -167,6 +167,9 @@ def tooltip_info(self, **kwargs):
     return HttpResponse(html)
 ```
 
+The html goes into the tooltip as it is. Any `<script>` in it runs once the tooltip is on the page, so content
+that sets itself up with a script, such as a dropdown menu, works in a tooltip as it does in an html command.
+
 **Timer handlers** — when the POST data contains `{timer: "name"}`:
 
 ```python

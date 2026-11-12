@@ -514,6 +514,11 @@ if (typeof ajax_helpers === 'undefined') {
                             var inner = tip.querySelector('.ah-tooltip-inner') || tip.querySelector('.tooltip-inner') || tip;
                             inner.innerHTML = data;
                             document.body.appendChild(tip);
+                            // innerHTML runs no script, but the jQuery client's tooltip did, and content
+                            // such as a dropdown menu wires itself up with one. Run them once the tip is
+                            // in the document, where they look their elements up by id, and before it is
+                            // positioned, so any content a script changes is measured.
+                            activate_scripts(tip);
                             position_tooltip(tip, el, placement);
                             active_tooltip = tip;
                             tip.addEventListener('mouseenter', function () {
